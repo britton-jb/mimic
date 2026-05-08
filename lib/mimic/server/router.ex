@@ -5,7 +5,7 @@ defmodule Mimic.Server.Router do
 
   @spec init_pool_size() :: pos_integer()
   def init_pool_size do
-    size = Application.get_env(:mimic, :pool_size, 1)
+    size = Application.get_env(:mimic, :pool_size, System.schedulers_online())
     :persistent_term.put(@pool_size_key, size)
     size
   end

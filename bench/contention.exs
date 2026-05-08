@@ -1,8 +1,8 @@
 # Mimic shard-pool contention benchmark.
 #
-# Usage:
-#   MIX_ENV=test mix run bench/contention.exs
-#   MIX_ENV=test MIMIC_POOL_SIZE=8 mix run bench/contention.exs
+# Usage (--no-start is required so Application.put_env applies before init):
+#   MIX_ENV=test mix run --no-start bench/contention.exs
+#   MIX_ENV=test MIMIC_POOL_SIZE=1 mix run --no-start bench/contention.exs
 #
 # Spawns K caller processes that each issue M mocked calls and reports
 # p50/p95/p99 latency for [:mimic, :apply, :stop] plus per-call coordinator

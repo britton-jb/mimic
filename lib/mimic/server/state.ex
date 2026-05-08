@@ -27,7 +27,11 @@ defmodule Mimic.Server.State do
   def put_call_history(state, caller, module, fn_name, arity, args) do
     update_in(
       state,
-      [Access.key(:call_history), Access.key(caller, %{}), Access.key({module, fn_name, arity}, [])],
+      [
+        Access.key(:call_history),
+        Access.key(caller, %{}),
+        Access.key({module, fn_name, arity}, [])
+      ],
       &[args | &1]
     )
   end

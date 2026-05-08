@@ -124,12 +124,22 @@ defmodule Mimic.Server do
   end
 
   defp ensure_module_copied(module) do
-    :telemetry.span([:mimic, :ensure_module_copied], %{module: module}, fn ->
+    :telemetry.span(
+      [:mimic, :ensure_module_copied],
+      %{module: module},
+      fn -> do_ensure_module_copied(module) end
+    )
+  end
+
+  defp do_ensure_module_copied(module) do
+    if Mimic.Module.copied?(module) do
+      {{:ok, :cached}, %{outcome: :cached}}
+    else
       case coord_call({:ensure_module_copied, module}) do
         {:ok, outcome} -> {{:ok, outcome}, %{outcome: outcome}}
         {:error, _} = err -> {err, %{outcome: :error}}
       end
-    end)
+    end
   end
 
   defp check_mode(caller) do

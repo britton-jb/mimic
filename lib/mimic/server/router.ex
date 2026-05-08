@@ -22,4 +22,21 @@ defmodule Mimic.Server.Router do
   def shard_for(pid) when is_pid(pid) do
     shard_name(:erlang.phash2(pid, pool_size()))
   end
+
+  @spec shard_call(pid(), term(), timeout()) :: term()
+  def shard_call(caller_pid, msg, timeout \\ 5000) do
+    GenServer.call(shard_for(caller_pid), msg, timeout)
+  end
+
+  @spec shard_cast(pid(), term()) :: :ok
+  def shard_cast(caller_pid, msg) do
+    GenServer.cast(shard_for(caller_pid), msg)
+  end
+
+  @spec broadcast_to_shards(term()) :: :ok
+  def broadcast_to_shards(msg) do
+    Enum.each(0..(pool_size() - 1), fn i ->
+      GenServer.call(shard_name(i), msg)
+    end)
+  end
 end

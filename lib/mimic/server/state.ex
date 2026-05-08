@@ -1,16 +1,10 @@
 defmodule Mimic.Server.State do
   @moduledoc false
 
-  defstruct verify_on_exit: MapSet.new(),
-            mode: :private,
-            global_pid: nil,
+  defstruct expectations: %{},
             stubs: %{},
-            expectations: %{},
-            modules_beam: %{},
-            modules_to_be_copied: MapSet.new(),
-            reset_tasks: %{},
-            modules_opts: %{},
-            call_history: %{}
+            call_history: %{},
+            verify_on_exit: MapSet.new()
 
   defmodule Expectation do
     @moduledoc false

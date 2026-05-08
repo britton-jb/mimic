@@ -51,7 +51,7 @@ defmodule Mimic.Server.Coordinator do
   @impl true
   def handle_call({:ensure_module_copied, module}, _from, state) do
     case ensure_module_copied(module, state) do
-      {:ok, state} -> {:reply, :ok, state}
+      {:ok, outcome, state} -> {:reply, {:ok, outcome}, state}
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -130,7 +130,7 @@ defmodule Mimic.Server.Coordinator do
 
       state =
         if Cover.enabled_for?(module) do
-          {:ok, state} = ensure_module_copied(module, state)
+          {:ok, _outcome, state} = ensure_module_copied(module, state)
           state
         else
           state
@@ -150,16 +150,16 @@ defmodule Mimic.Server.Coordinator do
   defp ensure_module_copied(module, state) do
     cond do
       Mimic.Module.copied?(module) ->
-        {:ok, state}
+        {:ok, :already_copied, state}
 
       MapSet.member?(state.modules_to_be_copied, module) ->
         case Mimic.Module.replace!(module, state.modules_opts[module]) do
           {beam_file, coverdata_path} ->
             modules_beam = Map.put(state.modules_beam, module, {beam_file, coverdata_path})
-            {:ok, %{state | modules_beam: modules_beam}}
+            {:ok, :replaced, %{state | modules_beam: modules_beam}}
 
           :ok ->
-            {:ok, state}
+            {:ok, :replaced, state}
         end
 
       true ->

@@ -33,6 +33,7 @@ defmodule Mimic.Mixfile do
   defp deps do
     [
       {:ham, "~> 0.3"},
+      {:telemetry, "~> 1.0"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:credo, "~> 1.0", only: :dev}
     ]

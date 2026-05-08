@@ -77,7 +77,7 @@ defmodule Mimic.Server do
         _ -> self()
       end
 
-    with :ok <- coord_call({:ensure_module_copied, module}) do
+    with {:ok, _} <- ensure_module_copied(module) do
       Router.shard_call(caller, {:get_calls, caller, module, fn_name, arity}, 5000)
     end
   end
@@ -118,9 +118,18 @@ defmodule Mimic.Server do
     caller = self()
 
     with :ok <- check_mode(caller),
-         :ok <- coord_call({:ensure_module_copied, module}) do
+         {:ok, _} <- ensure_module_copied(module) do
       Router.shard_call(caller, msg_fun.(caller), @long_timeout)
     end
+  end
+
+  defp ensure_module_copied(module) do
+    :telemetry.span([:mimic, :ensure_module_copied], %{module: module}, fn ->
+      case coord_call({:ensure_module_copied, module}) do
+        {:ok, outcome} -> {{:ok, outcome}, %{outcome: outcome}}
+        {:error, _} = err -> {err, %{outcome: :error}}
+      end
+    end)
   end
 
   defp check_mode(caller) do
@@ -140,30 +149,32 @@ defmodule Mimic.Server do
   end
 
   defp do_apply(owner_pid, module, fn_name, arity, args) do
-    case Router.shard_call(
-           owner_pid,
-           {:apply, owner_pid, module, fn_name, arity, args},
-           :infinity
-         ) do
-      {:ok, func} ->
-        Kernel.apply(func, args)
+    metadata = %{module: module, fn_name: fn_name, arity: arity}
 
-      :original ->
-        apply_original(module, fn_name, args)
+    :telemetry.span([:mimic, :apply], metadata, fn ->
+      msg = {:apply, owner_pid, module, fn_name, arity, args}
 
-      {:unexpected, :fulfilled} ->
-        mfa = Exception.format_mfa(module, fn_name, arity)
+      case Router.shard_call(owner_pid, msg, :infinity) do
+        {:ok, func} ->
+          {Kernel.apply(func, args), %{outcome: :mocked}}
 
-        raise Mimic.UnexpectedCallError,
-              "#{mfa} called in process #{inspect(self())} but expectations are already fulfilled"
+        :original ->
+          {apply_original(module, fn_name, args), %{outcome: :original}}
 
-      {:unexpected, num_calls, num_applied_calls} ->
-        mfa = Exception.format_mfa(module, fn_name, arity)
+        {:unexpected, :fulfilled} ->
+          mfa = Exception.format_mfa(module, fn_name, arity)
 
-        raise Mimic.UnexpectedCallError,
-              "expected #{mfa} to be called #{num_calls} time(s) " <>
-                "but it has been called #{num_applied_calls} time(s) in process #{inspect(self())}"
-    end
+          raise Mimic.UnexpectedCallError,
+                "#{mfa} called in process #{inspect(self())} but expectations are already fulfilled"
+
+        {:unexpected, num_calls, num_applied_calls} ->
+          mfa = Exception.format_mfa(module, fn_name, arity)
+
+          raise Mimic.UnexpectedCallError,
+                "expected #{mfa} to be called #{num_calls} time(s) " <>
+                  "but it has been called #{num_applied_calls} time(s) in process #{inspect(self())}"
+      end
+    end)
   end
 
   defp apply_original(module, fn_name, args),

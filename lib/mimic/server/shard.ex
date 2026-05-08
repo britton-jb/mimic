@@ -154,6 +154,16 @@ defmodule Mimic.Server.Shard do
     {:reply, :ok, %State{}}
   end
 
+  def handle_call({:purge_module, module}, _from, state) do
+    {:reply, :ok,
+     %{
+       state
+       | expectations: drop_module(state.expectations, module),
+         stubs: drop_module(state.stubs, module),
+         call_history: drop_module(state.call_history, module)
+     }}
+  end
+
   def handle_call({:get_calls, caller_pid, module, fn_name, arity}, _from, state) do
     case pop_in(state.call_history, [Access.key(caller_pid, %{}), {module, fn_name, arity}]) do
       {calls, call_history} when is_list(calls) ->
@@ -185,6 +195,14 @@ defmodule Mimic.Server.Shard do
         stubs: Map.delete(state.stubs, pid),
         call_history: Map.delete(state.call_history, pid)
     }
+  end
+
+  defp drop_module(per_pid_store, module) do
+    for {pid, mfa_map} <- per_pid_store,
+        kept = Map.reject(mfa_map, fn {{m, _, _}, _} -> m == module end),
+        map_size(kept) > 0,
+        into: %{},
+        do: {pid, kept}
   end
 
   defp public_functions(module) do

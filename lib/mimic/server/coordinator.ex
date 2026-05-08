@@ -105,6 +105,9 @@ defmodule Mimic.Server.Coordinator do
       end
 
     state = %{state | modules_beam: Map.delete(state.modules_beam, module)}
+    # Synchronous so concurrent setup ops can't observe shards still holding
+    # entries for a module the coordinator has already cleared.
+    Router.broadcast_to_shards({:purge_module, module})
 
     if state.modules_to_be_copied == MapSet.new() do
       tasks |> Map.values() |> Task.await_many(@long_timeout)

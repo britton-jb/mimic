@@ -1,26 +1,9 @@
 defmodule Mimic.Server do
   use GenServer
   alias Mimic.Cover
+  alias Mimic.Server.State
+  alias Mimic.Server.State.Expectation
   @moduledoc false
-
-  defmodule State do
-    @moduledoc false
-    defstruct verify_on_exit: MapSet.new(),
-              mode: :private,
-              global_pid: nil,
-              stubs: %{},
-              expectations: %{},
-              modules_beam: %{},
-              modules_to_be_copied: MapSet.new(),
-              reset_tasks: %{},
-              modules_opts: %{},
-              call_history: %{}
-  end
-
-  defmodule Expectation do
-    @moduledoc false
-    defstruct func: nil, num_applied_calls: 0, num_calls: nil
-  end
 
   @long_timeout Application.compile_env(:mimic, :server_timeout, 60_000)
 
@@ -238,33 +221,6 @@ defmodule Mimic.Server do
     %{state | expectations: expectations, stubs: stubs, call_history: call_history}
   end
 
-  defp find_stub(stubs, module, fn_name, arity, caller) do
-    case get_in(stubs, [caller, {module, fn_name, arity}]) do
-      func when is_function(func) -> {:ok, func}
-      nil -> :unexpected
-    end
-  end
-
-  defp get_call_history(state, caller, module, fn_name, arity) do
-    get_in(state.call_history, [Access.key(caller, %{}), {module, fn_name, arity}])
-  end
-
-  defp put_call_history(state, caller, module, fn_name, arity, args) do
-    call_history = get_call_history(state, caller, module, fn_name, arity) || []
-
-    %{
-      state
-      | call_history:
-          put_in(
-            state.call_history,
-            [Access.key(caller, %{}), {module, fn_name, arity}],
-            [
-              args | call_history
-            ]
-          )
-    }
-  end
-
   def handle_call({:apply, owner_pid, module, fn_name, arity, args}, _from, state) do
     caller =
       if state.mode == :private do
@@ -274,14 +230,13 @@ defmodule Mimic.Server do
       end
 
     case get_in(state.expectations, [Access.key(caller, %{}), {module, fn_name, arity}]) do
-      [expectation | _] = expectations ->
-        case apply_call_to_expectations(expectations, expectation) do
+      [_ | _] = expectations ->
+        case State.apply_call_to_expectations(expectations) do
           {:ok, func, new_expectations} ->
             expectations =
               put_in(state.expectations, [caller, {module, fn_name, arity}], new_expectations)
 
-            # Track call history
-            state = put_call_history(state, caller, module, fn_name, arity, args)
+            state = State.put_call_history(state, caller, module, fn_name, arity, args)
 
             {:reply, {:ok, func}, %{state | expectations: expectations}}
 
@@ -290,10 +245,9 @@ defmodule Mimic.Server do
         end
 
       expectations ->
-        case {find_stub(state.stubs, module, fn_name, arity, caller), expectations} do
+        case {State.find_stub(state.stubs, module, fn_name, arity, caller), expectations} do
           {{:ok, func}, _} ->
-            # Track call history for stubs too
-            state = put_call_history(state, caller, module, fn_name, arity, args)
+            state = State.put_call_history(state, caller, module, fn_name, arity, args)
 
             {:reply, {:ok, func}, state}
 
@@ -613,23 +567,6 @@ defmodule Mimic.Server do
 
       true ->
         {:error, {:module_not_copied, module}}
-    end
-  end
-
-  defp apply_call_to_expectations(
-         expectations,
-         expectation = %Expectation{num_applied_calls: num_applied_calls, num_calls: num_calls}
-       ) do
-    cond do
-      num_applied_calls + 1 == num_calls ->
-        {:ok, expectation.func, tl(expectations)}
-
-      num_applied_calls + 1 < num_calls ->
-        {:ok, expectation.func,
-         [%{expectation | num_applied_calls: num_applied_calls + 1} | tl(expectations)]}
-
-      true ->
-        {:unexpected, expectation.num_calls, expectation.num_applied_calls + 1}
     end
   end
 

@@ -8,7 +8,7 @@ defmodule Mimic.Server do
 
   @spec allow(module, pid, pid) :: {:ok, module} | {:error, :global}
   def allow(module, owner_pid, allowed_pid) do
-    coord_call({:allow, module, owner_pid, allowed_pid}, 5000)
+    coord_call({:allow, module, owner_pid, allowed_pid})
   end
 
   @spec verify(pid) :: non_neg_integer
